@@ -16,6 +16,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include "utils.h"
+#include "Structs.h"
+
 // Link opengl32.lib, glfw3.lib and glew32.lib
 #pragma comment(lib, "opengl32.lib")
 #pragma comment(lib, "glfw3.lib")
@@ -23,25 +26,6 @@
 
 int width = 800;
 int height = 800;
-
-struct Camera {
-	glm::vec3 position;
-	glm::vec3 direction;
-	float rotationX;
-	float rotationY;
-
-	glm::vec3 worldUp;
-
-	glm::vec3 front;
-	glm::vec3 right;
-	glm::vec3 up;
-
-	float lastX;
-	float lastY;
-
-	glm::mat4 projection;
-	glm::mat4 view;
-};
 
 float degtorad = 3.141592f / 180.0f;
 
@@ -55,7 +39,7 @@ void cameraMouseCallback(GLFWwindow *window, const double posX, const double pos
 	camera.lastX = width / 2;
 	camera.lastY = height / 2;
 
-	const float sensitivity = 0.2f;
+	const float sensitivity = 0.1f;
 
 	camera.rotationY += offset_x * sensitivity;
 	camera.rotationX -= offset_y * sensitivity;
@@ -74,29 +58,51 @@ void cameraMouseCallback(GLFWwindow *window, const double posX, const double pos
 	camera.up = glm::normalize(glm::cross(camera.right, camera.front));
 
 	glfwSetCursorPos(window, width / 2, height / 2);
-
 }
 
-void setUniformM4(const unsigned int shader, const char* name, glm::mat4 matrix) {
-	const unsigned int location = glGetUniformLocation(shader, name);
-	glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(matrix));
-}
-void setUniformV3(const unsigned int shader, const char* name, glm::vec3 vector) {
-	const unsigned int location = glGetUniformLocation(shader, name);
-	glUniform3fv(location, 1, glm::value_ptr(vector));
-}
-void setUniformF(const unsigned int shader, const char* name, float value) {
-	const unsigned int location = glGetUniformLocation(shader, name);
-	glUniform1f(location, value);
-}
-void setUniformV2(const unsigned int shader, const char* name, glm::vec2 vector) {
-	const unsigned int location = glGetUniformLocation(shader, name);
-	glUniform2fv(location, 1, glm::value_ptr(vector));
+bool useFresnel = false;
+
+void keyPressedCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+		glfwSetWindowShouldClose(window, GLFW_TRUE);
+
+	if (key == GLFW_KEY_F && action == GLFW_PRESS) {
+		useFresnel = !useFresnel;
+	}
+
+	if (action == GLFW_PRESS) {
+		if (key == GLFW_KEY_W)
+			camera.keys.w = true;
+		if (key == GLFW_KEY_A)
+			camera.keys.a = true;
+		if (key == GLFW_KEY_S)
+			camera.keys.s = true;
+		if (key == GLFW_KEY_D)
+			camera.keys.d = true;
+		if (key == GLFW_KEY_SPACE)
+			camera.keys.space = true;
+		if (key == GLFW_KEY_LEFT_CONTROL)
+			camera.keys.left_control = true;
+	}
+	if (action == GLFW_RELEASE) {
+		if (key == GLFW_KEY_W)
+			camera.keys.w = false;
+		if (key == GLFW_KEY_A)
+			camera.keys.a = false;
+		if (key == GLFW_KEY_S)
+			camera.keys.s = false;
+		if (key == GLFW_KEY_D)
+			camera.keys.d = false;
+		if (key == GLFW_KEY_SPACE)
+			camera.keys.space = false;
+		if (key == GLFW_KEY_LEFT_CONTROL)
+			camera.keys.left_control = false;
+	}
 }
 
 
 void initCamera() {
-	camera.position = glm::vec3(0.0f, 0.0f, -5.0f);
+	camera.position = glm::vec3(0.0f, 0.5f, -5.0f);
 	camera.direction = glm::vec3(0.0f, 0.0f, 1.0f);
 	camera.rotationX = 0.0f;
 	camera.rotationY = 0.0f;
@@ -108,6 +114,7 @@ void initCamera() {
 	camera.lastY = height / 2;
 	camera.projection = glm::perspective(glm::radians(45.0f), (float)width / (float)height, 0.1f, 100.0f);
 	camera.view = glm::lookAt(camera.position, camera.position + camera.front, camera.up);
+	camera.keys = { };
 }
 
 std::string loadFile(std::string filename) {
@@ -115,6 +122,22 @@ std::string loadFile(std::string filename) {
 	std::stringstream buffer;
 	buffer << t.rdbuf();
 	return buffer.str();
+}
+
+void updateCamera(float deltaTime) {
+	const float cameraSpeed = 5.0f * deltaTime;
+	if (camera.keys.w)
+		camera.position += cameraSpeed * camera.front;
+	if (camera.keys.s)
+		camera.position -= cameraSpeed * camera.front;
+	if (camera.keys.a)
+		camera.position -= camera.right * cameraSpeed;
+	if (camera.keys.d)
+		camera.position += camera.right * cameraSpeed;
+	if (camera.keys.space)
+		camera.position += cameraSpeed * camera.worldUp;
+	if (camera.keys.left_control)
+		camera.position -= cameraSpeed * camera.worldUp;
 }
 
 int main() {
@@ -212,9 +235,19 @@ int main() {
 	// Callbacks
 
 	glfwSetCursorPosCallback(window, cameraMouseCallback);
+	glfwSetKeyCallback(window, keyPressedCallback);
+
+	float lastTime = glfwGetTime();
 
 	// Main rendering / event loop
 	while (!glfwWindowShouldClose(window)) {
+
+		// Update the camera
+		float currentTime = glfwGetTime();
+		float deltaTime = currentTime - lastTime;
+		lastTime = currentTime;
+
+		updateCamera(deltaTime);
 		
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
@@ -222,7 +255,7 @@ int main() {
 		// Draw the main quad
 		glUseProgram(shader);
 
-		camera.projection = glm::perspective(glm::radians(70.0f), (float)width / (float)height, 0.1f, 100.0f);
+		camera.projection = glm::perspective(glm::radians(70.0f ), (float)width / (float)height, 0.1f, 100.0f);
 		camera.view = glm::lookAt(camera.position, camera.position + camera.front, camera.up);
 
 		setUniformV2(shader, "u_Resolution", glm::vec2(width, height));
@@ -230,6 +263,8 @@ int main() {
 
 		setUniformM4(shader, "u_InverseView", glm::inverse(camera.view));
 		setUniformM4(shader, "u_InverseProjection", glm::inverse(camera.projection));
+
+		setUniformInt(shader, "useFresnel", useFresnel);
 
 		glBindVertexArray(vao);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
