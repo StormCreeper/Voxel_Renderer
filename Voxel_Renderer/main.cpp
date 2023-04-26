@@ -19,6 +19,8 @@
 #include "utils.h"
 #include "Structs.h"
 
+#include <random>
+
 // Link opengl32.lib, glfw3.lib and glew32.lib
 #pragma comment(lib, "opengl32.lib")
 #pragma comment(lib, "glfw3.lib")
@@ -141,6 +143,7 @@ void updateCamera(float deltaTime) {
 }
 
 int main() {
+	srand(time(NULL));
 	// Initialize GLFW
 	if (!glfwInit()) {
 		std::cerr << "Failed to initialize GLFW" << std::endl;
@@ -237,9 +240,12 @@ int main() {
 	for (int i = 0; i < 10; i++) {
 		for (int j = 0; j < 10; j++) {
 			for (int k = 0; k < 10; k++) {
-				s_data.data[i + 10 * j + 100 * k] = 1;
+				s_data.data[i + 10 * j + 100 * k] = (rand() % 2) * (rand() % 10);
 			}
 		}
+	}
+	for (int i = 0; i < 10; i++) {
+		s_data.palette[i] = glm::vec3(rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, rand() / (float)RAND_MAX);
 	}
 
 	GLuint ssbo;
@@ -251,6 +257,7 @@ int main() {
 
 	initCamera();
 
+	float lastChangeTime = glfwGetTime();
 
 	// Callbacks
 
@@ -270,6 +277,21 @@ int main() {
 		updateCamera(deltaTime);
 
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, ssbo);
+
+		if (currentTime > lastChangeTime + 0.01f) {
+			for (int i = 0; i < 30; i++) {
+				int x = rand() % 10;
+				int y = rand() % 10;
+				int z = rand() % 10;
+
+				s_data.data[x + 10 * y + 100 * z] = (rand() % 2) * (rand() % 10);
+			}
+
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+			GLvoid* p = glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_WRITE_ONLY);
+			memcpy(p, &s_data, sizeof(shader_data));
+			glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+		}
 		
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);

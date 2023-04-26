@@ -40,4 +40,6 @@ struct shader_data {
 	int mapd;
 
 	int data[1000];
+
+	glm::vec3 palette[10];
 };

@@ -6,6 +6,8 @@ layout (std430, binding = 2) buffer shader_data {
 	int mapd;
 
 	int data[1000];
+
+	vec3 palette[10];
 };
 
 out vec4 FragColor;
@@ -200,6 +202,7 @@ float voxel_traversal(vec3 orig, vec3 direction, inout vec3 normal, inout uint b
 
 		uint block = testVoxel(mapX, mapY, mapZ);
 		if (block != 0u) {
+			blockType = block;
 			hit = 1;
 
 			if (side == 0) {
@@ -254,7 +257,7 @@ void sceneIntersect(vec3 pos, vec3 dir, out intersection closest) {
 		closest.t = t;
 		closest.pos = pos + dir * t;
 		closest.normal = normal;
-		closest.material = Material(vec3(0.9, 0.9, 0.9), vec3(0), vec3(0), 0.0, 0.0);
+		closest.material = Material(palette[blockType], vec3(0), vec3(0), 0.0, 0.0);
 		closest.hit = true;
 	}
 }
