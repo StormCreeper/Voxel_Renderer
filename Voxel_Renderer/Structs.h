@@ -33,3 +33,11 @@ struct Camera {
 
 	keys keys;
 };
+
+struct shader_data {
+	int mapw;
+	int maph;
+	int mapd;
+
+	int data[1000];
+};

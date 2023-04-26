@@ -146,6 +146,10 @@ int main() {
 		std::cerr << "Failed to initialize GLFW" << std::endl;
 		return -1;
 	}
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
 	// Create a windowed mode window and its OpenGL context
 	GLFWwindow* window = glfwCreateWindow(800, 800, "Hello World", NULL, NULL);
 	if (!window) {
@@ -229,6 +233,22 @@ int main() {
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragmentShader);
 
+	shader_data s_data = { 10, 10, 10, 0};
+	for (int i = 0; i < 10; i++) {
+		for (int j = 0; j < 10; j++) {
+			for (int k = 0; k < 10; k++) {
+				s_data.data[i + 10 * j + 100 * k] = 1;
+			}
+		}
+	}
+
+	GLuint ssbo;
+	glGenBuffers(1, &ssbo);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(shader_data), &s_data, GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, ssbo);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
 	initCamera();
 
 
@@ -248,6 +268,8 @@ int main() {
 		lastTime = currentTime;
 
 		updateCamera(deltaTime);
+
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, ssbo);
 		
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
@@ -272,6 +294,8 @@ int main() {
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
+
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 	}
 
 	// Cleanup

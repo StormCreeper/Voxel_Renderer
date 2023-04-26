@@ -1,4 +1,12 @@
-#version 330 core
+#version 430 core
+
+layout (std430, binding = 2) buffer shader_data {
+	int mapw;
+	int maph;
+	int mapd;
+
+	int data[1000];
+};
 
 out vec4 FragColor;
 in vec2 fragPos;
@@ -68,7 +76,7 @@ const int numSpheres = 4;
 Sphere spheres[numSpheres] = Sphere[] (
 	Sphere(vec3(-3, 0, 0), 1, Material(vec3(0.95, 0.5, 0.95), vec3(1.0, 0.80, 0.80), vec3(0), 1.0, 0.1)),
 	Sphere(vec3(-1, 0, 0), 1, Material(vec3(0.5, 0.95, 0.95), vec3(0.80, 1.0, 0.80), vec3(0), 0.9, 0.1)),
-	Sphere(vec3( 1, 2, 0), 1, Material(vec3(0.95, 0.95, 0.95), vec3(1, 1, 1), vec3(0), 0, 0)),
+	Sphere(vec3(1, 2, -2), 1, Material(vec3(0.95, 0.95, 0.95), vec3(1, 1, 1), vec3(5), 0, 0)),
 	Sphere(vec3( 3, 0, 0), 1, Material(vec3(0.95, 0.95, 0.95), vec3(0.50, 0.50, 0.95), vec3(0), 0.1, 0.9))
 );
 
@@ -98,21 +106,20 @@ float planeIntersect(vec3 pos, vec3 dir, vec3 planeNormal, vec3 planePos) {
 }
 
 uint testVoxel(int x, int y, int z) {
-	return float(y) < sin(float(x + z))  * 2 + 2 ? 1u : 0u;
+	//return float(y) < sin(float(x + z))  * 2 + 2 ? 1u : 0u;
+	return data[x + y * mapw + z * mapw * maph];
 }
-
-ivec3 mapSize = ivec3(10, 10, 10);
 
 float projectToCube(vec3 ro, vec3 rd) {
 	
 	float tx1 = (0 - ro.x) / rd.x;
-	float tx2 = (mapSize.x - ro.x) / rd.x;
+	float tx2 = (mapw - ro.x) / rd.x;
 
 	float ty1 = (0 - ro.y) / rd.y;
-	float ty2 = (mapSize.y - ro.y) / rd.y;
+	float ty2 = (maph - ro.y) / rd.y;
 
 	float tz1 = (0 - ro.z) / rd.z;
-	float tz2 = (mapSize.z - ro.z) / rd.z;
+	float tz2 = (mapd - ro.z) / rd.z;
 
 	float tx = max(min(tx1, tx2), 0);
 	float ty = max(min(ty1, ty2), 0);
@@ -174,7 +181,7 @@ float voxel_traversal(vec3 orig, vec3 direction, inout vec3 normal, inout uint b
 	int step = 1;
 
 	for (int i = 0; i < 6000; i++) {
-		if ((mapX >= mapSize.x && stepX > 0) || (mapY >= mapSize.y && stepY > 0) || (mapZ >= mapSize.z && stepZ > 0)) break;
+		if ((mapX >= mapw && stepX > 0) || (mapY >= maph && stepY > 0) || (mapZ >= mapd && stepZ > 0)) break;
 		if ((mapX < 0 && stepX < 0) || (mapY < 0 && stepY < 0) || (mapZ < 0 && stepZ < 0)) break;
 
 		if (sideDistX < sideDistY && sideDistX < sideDistZ) {
@@ -305,11 +312,11 @@ float FresnelReflectAmount(float n1, float n2, vec3 normal, vec3 incident, float
 // simple background environment lighting with sun
 vec3 skycolor(vec3 dir) {
 
-	float skyGradientT = pow(smoothstep(0, 0.4, dir.y), 0.35);
+	float skyGradientT = pow(smoothstep(0., 0.4, dir.y), 0.35);
 	vec3 skyGradient = lerp(env.SkyColorHorizon, env.SkyColorZenith, skyGradientT);
 	float sun = pow(max(0, dot(dir, env.SunDirection)), env.SunFocus) * env.SunIntensity;
 
-	float groundToSkyT = smoothstep(-0.01, 0, dir.y);
+	float groundToSkyT = smoothstep(-0.01, 0., dir.y);
 	float sunMask = groundToSkyT >= 1 ? 1 : 0;
 
 	return lerp(env.GroundColor, skyGradient, groundToSkyT) + sun * env.SunColor * sunMask;
@@ -322,7 +329,7 @@ int numSamples = 100;
 void main() {
 	vec3 finalColor = vec3(0);
 
-	for(int sample = 0; sample < numSamples; sample++) {
+	for(int spp = 0; spp < numSamples; spp++) {
 		vec2 ScreenSpace = (gl_FragCoord.xy + vec2(RandomFloat01(rngState), RandomFloat01(rngState))) / u_Resolution.xy;
 		vec4 Clip = vec4(ScreenSpace.xy * 2.0f - 1.0f, -1.0, 1.0);
 		vec4 Eye = vec4(vec2(u_InverseProjection * Clip), -1.0, 0.0);
