@@ -142,41 +142,43 @@ void updateCamera(float deltaTime) {
 		camera.position -= cameraSpeed * camera.worldUp;
 }
 
-GLFWwindow* initOpenGL() {
+bool initOpenGL(AppState *appState) {
 	if (!glfwInit()) {
 		std::cerr << "Failed to initialize GLFW" << std::endl;
-		return nullptr;
+		return 0;
 	}
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
 	// Create a windowed mode window and its OpenGL context
-	GLFWwindow* window = glfwCreateWindow(800, 800, "Hello World", NULL, NULL);
-	if (!window) {
+	appState->window = glfwCreateWindow(800, 800, "Hello World", NULL, NULL);
+	if (!appState->window) {
 		std::cerr << "Failed to create GLFW window" << std::endl;
 		glfwTerminate();
-		return nullptr;
+		return 0;
 	}
 	// Make the window's context current
-	glfwMakeContextCurrent(window);
+	glfwMakeContextCurrent(appState->window);
+	glfwSwapInterval(0);
+
 	// Initialize GLEW
 	if (glewInit() != GLEW_OK) {
 		std::cerr << "Failed to initialize GLEW" << std::endl;
-		return nullptr;
+		return 0;
 	}
 
-	return window;
+	return 1;
 }
 
 int main() {
 	srand(time(NULL));
-	
-	GLFWwindow *window = initOpenGL();
-	if(!window)
-		return -1;
 
 	AppState appState;
+	
+	if(!initOpenGL(&appState))
+		return -1;
+
 
 
 	// Create the quad to render the voxel scene
@@ -246,7 +248,7 @@ int main() {
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragmentShader);
 
-	shader_data s_data = { 10, 10, 10, 0};
+	shader_data s_data = { 50, 2, 10};
 	for (int i = 0; i < 10; i++) {
 		for (int j = 0; j < 10; j++) {
 			for (int k = 0; k < 10; k++) {
@@ -276,18 +278,35 @@ int main() {
 
 	// Callbacks
 
-	glfwSetCursorPosCallback(window, cameraMouseCallback);
-	glfwSetKeyCallback(window, keyPressedCallback);
+	glfwSetCursorPosCallback(appState.window, cameraMouseCallback);
+	glfwSetKeyCallback(appState.window, keyPressedCallback);
 
 	float lastTime = glfwGetTime();
+	float lastTimeFPS = glfwGetTime();
+	int frameCount = 0;
 
 	// Main rendering / event loop
-	while (!glfwWindowShouldClose(window)) {
+	while (!glfwWindowShouldClose(appState.window)) {
 
 		// Update the camera
 		float currentTime = glfwGetTime();
 		float deltaTime = currentTime - lastTime;
 		lastTime = currentTime;
+
+		frameCount++;
+		if (currentTime > lastTimeFPS + 1) {
+			std::cout << "FPS : " << frameCount << std::endl << "SPP : " << spp << std::endl << std::endl;
+			frameCount = 0;
+			lastTimeFPS = currentTime;
+		}
+
+		if (abs(1.0f/deltaTime - 60) > 2) {
+			float sampleTime = deltaTime / spp;
+			float newSPP = 1.0f / (sampleTime * 60);
+			spp = (int)(spp + (newSPP - spp) * 0.1f);
+			if(spp < 1) spp = 1;
+			if (spp > 500) spp = 500;
+		}
 
 		updateCamera(deltaTime);
 
@@ -327,7 +346,7 @@ int main() {
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 		glBindVertexArray(0);
 
-		glfwSwapBuffers(window);
+		glfwSwapBuffers(appState.window);
 		glfwPollEvents();
 
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
@@ -340,7 +359,6 @@ int main() {
 	glDeleteBuffers(1, &appState.ssbo);
 
 	glfwTerminate();
-
 
 	return 0;
 }

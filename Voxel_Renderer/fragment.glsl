@@ -5,9 +5,10 @@ layout (std430, binding = 2) buffer shader_data {
 	int maph;
 	int mapd;
 
-	int data[1000];
-
 	vec3 palette[10];
+
+	int data[];
+
 };
 
 out vec4 FragColor;
@@ -88,7 +89,7 @@ Sphere spheres[numSpheres] = Sphere[] (
 const int numPlanes = 1;
 
 Plane planes[numPlanes] = Plane[] (
-	Plane(vec3(0, -1, 0), vec3(0, 1, 0), Material(vec3(0.9, 0.9, 0.9), vec3(0), vec3(0), 0.0, 0.0))
+	Plane(vec3(0, -1, 0), vec3(0, 1, 0), Material(vec3(1.0, 1.0, 1.0), vec3(0), vec3(0), 0.2, 0.5))
 );
 
 float sphereIntersect(Sphere sphere, vec3 pos, vec3 dir) {
@@ -291,7 +292,7 @@ environment env = environment(
 	vec3(1, 1, 1),
 	normalize(vec3(0.5, 0.5, 0.5)),
 	500,
-	25 * 0
+	25
 );
 
 float FresnelReflectAmount(float n1, float n2, vec3 normal, vec3 incident, float f0, float f90) {

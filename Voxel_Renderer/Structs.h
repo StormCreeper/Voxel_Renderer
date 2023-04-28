@@ -39,12 +39,14 @@ struct shader_data {
 	int maph;
 	int mapd;
 
+	glm::vec3 palette[10];
+	
 	int data[1000];
 
-	glm::vec3 palette[10];
 };
 
 struct AppState {
+	GLFWwindow* window;
 	GLuint vao, vbo;
 	GLuint shader;
 	shader_data s_data;
