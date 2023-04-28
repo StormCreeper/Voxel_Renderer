@@ -33,7 +33,11 @@ float degtorad = 3.141592f / 180.0f;
 
 Camera camera;
 
+int frameSinceLastReset = 0;
+
 void cameraMouseCallback(GLFWwindow *window, const double posX, const double posY) {
+
+	frameSinceLastReset = 0;
 
 	const float offset_x = posX - camera.lastX;
 	const float offset_y = posY - camera.lastY;
@@ -65,6 +69,9 @@ void cameraMouseCallback(GLFWwindow *window, const double posX, const double pos
 bool useFresnel = false;
 
 void keyPressedCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+
+	frameSinceLastReset = 0;
+
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, GLFW_TRUE);
 
@@ -140,6 +147,10 @@ void updateCamera(float deltaTime) {
 		camera.position += cameraSpeed * camera.worldUp;
 	if (camera.keys.left_control)
 		camera.position -= cameraSpeed * camera.worldUp;
+
+	if (camera.keys.w || camera.keys.a || camera.keys.s || camera.keys.d || camera.keys.space || camera.keys.left_control) {
+		frameSinceLastReset = 0;
+	}
 }
 
 bool initOpenGL(AppState *appState) {
@@ -273,7 +284,7 @@ int main() {
 
 	// Init shader storage buffer
 
-	shader_data s_data = { 10, 10, 10};
+	shader_data s_data = { 50, 2, 10};
 	for (int i = 0; i < 10; i++) {
 		for (int j = 0; j < 10; j++) {
 			for (int k = 0; k < 10; k++) {
@@ -348,8 +359,6 @@ int main() {
 	int spp = 1;
 	int bounces = 10;
 
-	bool hasMoved = false;
-
 	initCamera();
 
 	float lastChangeTime = glfwGetTime();
@@ -388,8 +397,6 @@ int main() {
 		}
 
 		updateCamera(deltaTime);
-
-		frame = 0;
 
 		fb1 = (frame % 2 == 0) ? &appState.fb1 : &appState.fb2;
 		fb2 = (frame % 2 == 1) ? &appState.fb1 : &appState.fb2;
@@ -434,6 +441,8 @@ int main() {
 		setUniformInt(appState.shader, "u_SPP", spp);
 		setUniformInt(appState.shader, "u_Bounces", bounces);
 
+		setUniformInt(appState.shader, "u_FrameSinceLastReset", frameSinceLastReset);
+
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, fb2->colorTexture);
 
@@ -470,6 +479,7 @@ int main() {
 		glfwPollEvents();
 
 		frame++;
+		frameSinceLastReset++;
 	}
 
 	// Cleanup

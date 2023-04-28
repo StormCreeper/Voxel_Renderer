@@ -8,7 +8,6 @@ layout (std430, binding = 2) buffer shader_data {
 	vec3 palette[10];
 
 	int data[];
-
 };
 
 layout(location = 0) out vec4 outColor;
@@ -27,10 +26,12 @@ uniform bool useFresnel;
 uniform int u_SPP;
 uniform int u_Bounces;
 
+uniform int u_FrameSinceLastReset;
+
 uniform sampler2D u_LastColors;
 
 float tseed = 0;
-uint rngState = uint(uint(gl_FragCoord.x) * uint(1973) + uint(gl_FragCoord.y) * uint(9277) + uint(tseed * 100) * uint(26699)) | uint(1);
+uint rngState = uint(uint(gl_FragCoord.x) * uint(1973) + uint(gl_FragCoord.y) * uint(9277) + uint(tseed * 100) * uint(26699) + u_FrameSinceLastReset) | uint(1);
 
 uint wang_hash(inout uint seed) {
     seed = uint(seed ^ uint(61)) ^ uint(seed >> uint(16));
@@ -264,7 +265,7 @@ void sceneIntersect(vec3 pos, vec3 dir, out intersection closest) {
 		closest.t = t;
 		closest.pos = pos + dir * t;
 		closest.normal = normal;
-		closest.material = Material(palette[blockType], vec3(0), vec3(0), 0.0, 0.0);
+		closest.material = Material(palette[blockType], vec3(1), vec3(0), 0.999, 0.1);
 		closest.hit = true;
 	}
 }
@@ -295,7 +296,7 @@ environment env = environment(
 	vec3(1, 1, 1),
 	normalize(vec3(0.5, 0.5, 0.5)),
 	500,
-	25
+	50
 );
 
 float FresnelReflectAmount(float n1, float n2, vec3 normal, vec3 incident, float f0, float f90) {
@@ -368,8 +369,11 @@ void main() {
 		
 		finalColor += incomingLight / float(u_SPP);
 	}
-
-
+	
 	outColor = vec4(finalColor, 1);
+	if(u_FrameSinceLastReset > 0) {
+		vec4 lastColor = texture(u_LastColors, gl_FragCoord.xy / u_Resolution.xy);
+		outColor = (outColor + lastColor * u_FrameSinceLastReset) / (u_FrameSinceLastReset + 1);
+	}
 
 }
