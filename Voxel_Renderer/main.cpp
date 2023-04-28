@@ -273,7 +273,7 @@ int main() {
 
 	// Init shader storage buffer
 
-	shader_data s_data = { 50, 2, 10};
+	shader_data s_data = { 10, 10, 10};
 	for (int i = 0; i < 10; i++) {
 		for (int j = 0; j < 10; j++) {
 			for (int k = 0; k < 10; k++) {
@@ -293,20 +293,21 @@ int main() {
 
 	// Init the frame buffers
 
-	Framebuffer &fb1 = appState.fb1;
-	fb1.width = width;
-	fb1.height = height;
-	glGenFramebuffers(1, &fb1.fbo);
+	Framebuffer *fb1 = &appState.fb1;
+	fb1->width = width;
+	fb1->height = height;
+	glGenFramebuffers(1, &fb1->fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fb1->fbo);
 	
-	glGenTextures(1, &fb1.colorTexture);
-	glBindTexture(GL_TEXTURE_2D, fb1.colorTexture);
+	glGenTextures(1, &fb1->colorTexture);
+	glBindTexture(GL_TEXTURE_2D, fb1->colorTexture);
 
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, fb1.width, fb1.height, 0, GL_RGBA, GL_FLOAT, nullptr);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, fb1->width, fb1->height, 0, GL_RGBA, GL_FLOAT, nullptr);
 	
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, fb1.colorTexture, 0);
+	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, fb1->colorTexture, 0);
 
 	GLenum drawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
 	glDrawBuffers(1, drawBuffers);
@@ -316,20 +317,21 @@ int main() {
 	}
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-	Framebuffer& fb2 = appState.fb2;
-	fb2.width = width;
-	fb2.height = height;
-	glGenFramebuffers(1, &fb2.fbo);
+	Framebuffer *fb2 = &appState.fb2;
+	fb2->width = width;
+	fb2->height = height;
+	glGenFramebuffers(1, &fb2->fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fb2->fbo);
 
-	glGenTextures(1, &fb2.colorTexture);
-	glBindTexture(GL_TEXTURE_2D, fb2.colorTexture);
+	glGenTextures(1, &fb2->colorTexture);
+	glBindTexture(GL_TEXTURE_2D, fb2->colorTexture);
 
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, fb2.width, fb2.height, 0, GL_RGBA, GL_FLOAT, nullptr);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, fb2->width, fb2->height, 0, GL_RGBA, GL_FLOAT, nullptr);
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, fb2.colorTexture, 0);
+	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, fb2->colorTexture, 0);
 
 	//GLenum drawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
 	glDrawBuffers(1, drawBuffers);
@@ -345,6 +347,8 @@ int main() {
 
 	int spp = 1;
 	int bounces = 10;
+
+	bool hasMoved = false;
 
 	initCamera();
 
@@ -385,6 +389,16 @@ int main() {
 
 		updateCamera(deltaTime);
 
+		frame = 0;
+
+		fb1 = (frame % 2 == 0) ? &appState.fb1 : &appState.fb2;
+		fb2 = (frame % 2 == 1) ? &appState.fb1 : &appState.fb2;
+
+		glBindFramebuffer(GL_FRAMEBUFFER, fb1->fbo);
+
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		glBindVertexArray(appState.vao);
+
 		glViewport(0, 0, width, height);
 
 		glUseProgram(appState.shader);
@@ -407,9 +421,6 @@ int main() {
 		// First Pass
 		// TODO: Create the quad shader, make second and first pass, edit the fragment shader to do framebuffer.
 
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		glBindVertexArray(appState.vao);
-
 		// Draw the main quad
 
 		setUniformV2(appState.shader, "u_Resolution", glm::vec2(width, height));
@@ -423,18 +434,16 @@ int main() {
 		setUniformInt(appState.shader, "u_SPP", spp);
 		setUniformInt(appState.shader, "u_Bounces", bounces);
 
-		fb1 = (frame % 2 == 0) ? appState.fb1 : appState.fb2;
-		fb2 = (frame % 2 == 1) ? appState.fb1 : appState.fb2;
-
-		glBindFramebuffer(GL_FRAMEBUFFER, fb1.fbo);
 		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, fb2.colorTexture);
+		glBindTexture(GL_TEXTURE_2D, fb2->colorTexture);
 
 		setUniformInt(appState.shader, "u_LastColors", 0);
 
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		glDrawArrays(GL_TRIANGLES, 0, 6);
+
+		//glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -447,7 +456,7 @@ int main() {
 		glUseProgram(appState.quad_shader);
 
 		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, fb1.colorTexture);
+		glBindTexture(GL_TEXTURE_2D, fb1->colorTexture);
 
 		setUniformInt(appState.quad_shader, "u_Texture", 0);
 
@@ -460,8 +469,6 @@ int main() {
 		glfwSwapBuffers(appState.window);
 		glfwPollEvents();
 
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-
 		frame++;
 	}
 
@@ -470,10 +477,10 @@ int main() {
 	glDeleteBuffers(1, &appState.vbo);
 	glDeleteProgram(appState.shader);
 	glDeleteBuffers(1, &appState.ssbo);
-	glDeleteFramebuffers(1, &fb1.fbo);
-	glDeleteFramebuffers(1, &fb2.fbo);
-	glDeleteTextures(1, &fb1.colorTexture);
-	glDeleteTextures(1, &fb2.colorTexture);
+	glDeleteFramebuffers(1, &fb1->fbo);
+	glDeleteFramebuffers(1, &fb2->fbo);
+	glDeleteTextures(1, &fb1->colorTexture);
+	glDeleteTextures(1, &fb2->colorTexture);
 
 	glfwTerminate();
 
