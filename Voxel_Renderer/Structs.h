@@ -43,3 +43,10 @@ struct shader_data {
 
 	glm::vec3 palette[10];
 };
+
+struct AppState {
+	GLuint vao, vbo;
+	GLuint shader;
+	shader_data s_data;
+	GLuint ssbo;
+};

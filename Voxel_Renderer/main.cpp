@@ -142,12 +142,10 @@ void updateCamera(float deltaTime) {
 		camera.position -= cameraSpeed * camera.worldUp;
 }
 
-int main() {
-	srand(time(NULL));
-	// Initialize GLFW
+GLFWwindow* initOpenGL() {
 	if (!glfwInit()) {
 		std::cerr << "Failed to initialize GLFW" << std::endl;
-		return -1;
+		return nullptr;
 	}
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -158,15 +156,28 @@ int main() {
 	if (!window) {
 		std::cerr << "Failed to create GLFW window" << std::endl;
 		glfwTerminate();
-		return -1;
+		return nullptr;
 	}
 	// Make the window's context current
 	glfwMakeContextCurrent(window);
 	// Initialize GLEW
 	if (glewInit() != GLEW_OK) {
 		std::cerr << "Failed to initialize GLEW" << std::endl;
-		return -1;
+		return nullptr;
 	}
+
+	return window;
+}
+
+int main() {
+	srand(time(NULL));
+	
+	GLFWwindow *window = initOpenGL();
+	if(!window)
+		return -1;
+
+	AppState appState;
+
 
 	// Create the quad to render the voxel scene
 	float vertices[] = {
@@ -177,13 +188,12 @@ int main() {
 		 1.0f, -1.0f, 0.0f,
 		 1.0f,  1.0f, 0.0f
 	};
+
+	glGenVertexArrays(1, &appState.vao);
+	glGenBuffers(1, &appState.vbo);
 	
-	GLuint vao, vbo;
-	glGenVertexArrays(1, &vao);
-	glGenBuffers(1, &vbo);
-	
-	glBindVertexArray(vao);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBindVertexArray(appState.vao);
+	glBindBuffer(GL_ARRAY_BUFFER, appState.vbo);
 
 	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
@@ -193,7 +203,7 @@ int main() {
 	glBindVertexArray(0);
 
 	// Load the shader from a file
-	GLuint shader = glCreateProgram();
+	appState.shader = glCreateProgram();
 	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
 	GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
 
@@ -224,12 +234,12 @@ int main() {
 		std::cerr << "Failed to compile fragment shader: " << infoLog << std::endl;
 	}
 
-	glAttachShader(shader, vertexShader);
-	glAttachShader(shader, fragmentShader);
-	glLinkProgram(shader);
-	glGetProgramiv(shader, GL_LINK_STATUS, &success);
+	glAttachShader(appState.shader, vertexShader);
+	glAttachShader(appState.shader, fragmentShader);
+	glLinkProgram(appState.shader);
+	glGetProgramiv(appState.shader, GL_LINK_STATUS, &success);
 	if (!success) {
-		glGetProgramInfoLog(shader, 512, NULL, infoLog);
+		glGetProgramInfoLog(appState.shader, 512, NULL, infoLog);
 		std::cerr << "Failed to link shader program: " << infoLog << std::endl;
 	}
 
@@ -248,12 +258,17 @@ int main() {
 		s_data.palette[i] = glm::vec3(rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, rand() / (float)RAND_MAX);
 	}
 
-	GLuint ssbo;
-	glGenBuffers(1, &ssbo);
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+	glGenBuffers(1, &appState.ssbo);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, appState.ssbo);
 	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(shader_data), &s_data, GL_DYNAMIC_DRAW);
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, ssbo);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, appState.ssbo);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+
+	bool s_data_changed = false;
+
+	int spp = 1;
+	int bounces = 10;
 
 	initCamera();
 
@@ -276,41 +291,39 @@ int main() {
 
 		updateCamera(deltaTime);
 
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, ssbo);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, appState.ssbo);
 
-		if (currentTime > lastChangeTime + 0.01f) {
-			for (int i = 0; i < 30; i++) {
-				int x = rand() % 10;
-				int y = rand() % 10;
-				int z = rand() % 10;
+		if (s_data_changed) {
 
-				s_data.data[x + 10 * y + 100 * z] = (rand() % 2) * (rand() % 10);
-			}
-
-			glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, appState.ssbo);
 			GLvoid* p = glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_WRITE_ONLY);
 			memcpy(p, &s_data, sizeof(shader_data));
 			glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+
+			s_data_changed = false;
 		}
 		
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		// Draw the main quad
-		glUseProgram(shader);
+		glUseProgram(appState.shader);
 
 		camera.projection = glm::perspective(glm::radians(70.0f ), (float)width / (float)height, 0.1f, 100.0f);
 		camera.view = glm::lookAt(camera.position, camera.position + camera.front, camera.up);
 
-		setUniformV2(shader, "u_Resolution", glm::vec2(width, height));
-		setUniformF(shader, "u_Time", glfwGetTime());
+		setUniformV2(appState.shader, "u_Resolution", glm::vec2(width, height));
+		setUniformF(appState.shader, "u_Time", glfwGetTime());
 
-		setUniformM4(shader, "u_InverseView", glm::inverse(camera.view));
-		setUniformM4(shader, "u_InverseProjection", glm::inverse(camera.projection));
+		setUniformM4(appState.shader, "u_InverseView", glm::inverse(camera.view));
+		setUniformM4(appState.shader, "u_InverseProjection", glm::inverse(camera.projection));
 
-		setUniformInt(shader, "useFresnel", useFresnel);
+		setUniformInt(appState.shader, "useFresnel", useFresnel);
+		
+		setUniformInt(appState.shader, "u_SPP", spp);
+		setUniformInt(appState.shader, "u_Bounces", bounces);
 
-		glBindVertexArray(vao);
+		glBindVertexArray(appState.vao);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 		glBindVertexArray(0);
 
@@ -321,9 +334,10 @@ int main() {
 	}
 
 	// Cleanup
-	glDeleteVertexArrays(1, &vao);
-	glDeleteBuffers(1, &vbo);
-	glDeleteProgram(shader);
+	glDeleteVertexArrays(1, &appState.vao);
+	glDeleteBuffers(1, &appState.vbo);
+	glDeleteProgram(appState.shader);
+	glDeleteBuffers(1, &appState.ssbo);
 
 	glfwTerminate();
 

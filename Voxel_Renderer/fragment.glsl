@@ -22,6 +22,9 @@ uniform mat4 u_InverseView;
 
 uniform bool useFresnel;
 
+uniform int u_SPP;
+uniform int u_Bounces;
+
 float tseed = 0;
 uint rngState = uint(uint(gl_FragCoord.x) * uint(1973) + uint(gl_FragCoord.y) * uint(9277) + uint(tseed * 100) * uint(26699)) | uint(1);
 
@@ -325,14 +328,10 @@ vec3 skycolor(vec3 dir) {
 	return lerp(env.GroundColor, skyGradient, groundToSkyT) + sun * env.SunColor * sunMask;
 }
 
-int numBounces = 5;
-int numSamples = 100;
-
-
 void main() {
 	vec3 finalColor = vec3(0);
 
-	for(int spp = 0; spp < numSamples; spp++) {
+	for(int spp = 0; spp < u_SPP; spp++) {
 		vec2 ScreenSpace = (gl_FragCoord.xy + vec2(RandomFloat01(rngState), RandomFloat01(rngState))) / u_Resolution.xy;
 		vec4 Clip = vec4(ScreenSpace.xy * 2.0f - 1.0f, -1.0, 1.0);
 		vec4 Eye = vec4(vec2(u_InverseProjection * Clip), -1.0, 0.0);
@@ -344,7 +343,7 @@ void main() {
 		vec3 rayColor = vec3(1);
 		vec3 incomingLight = vec3(0);
 
-		for (int i = 0; i < numBounces; i++) {
+		for (int i = 0; i < u_Bounces; i++) {
 			intersection closest;
 
 			sceneIntersect(RayOrigin, RayDirection, closest);
@@ -363,7 +362,7 @@ void main() {
 			}
 		}
 		
-		finalColor += incomingLight / float(numSamples);
+		finalColor += incomingLight / float(u_SPP);
 	}
 
 
