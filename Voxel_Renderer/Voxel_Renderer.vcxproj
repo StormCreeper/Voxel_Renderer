@@ -140,6 +140,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="fragment.glsl" />
+    <None Include="quad_frag.glsl" />
     <None Include="vertex.glsl" />
   </ItemGroup>
   <ItemGroup>

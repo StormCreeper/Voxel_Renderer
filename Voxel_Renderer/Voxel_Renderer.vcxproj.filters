@@ -25,6 +25,7 @@
   <ItemGroup>
     <None Include="vertex.glsl" />
     <None Include="fragment.glsl" />
+    <None Include="quad_frag.glsl" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Structs.h">

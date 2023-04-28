@@ -45,10 +45,18 @@ struct shader_data {
 
 };
 
+struct Framebuffer {
+	GLuint fbo;
+	GLuint colorTexture;
+	int width;
+	int height;
+};
+
 struct AppState {
 	GLFWwindow* window;
 	GLuint vao, vbo;
 	GLuint shader;
 	shader_data s_data;
 	GLuint ssbo;
+	Framebuffer framebuffer;
 };

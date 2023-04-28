@@ -248,6 +248,8 @@ int main() {
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragmentShader);
 
+	// Init shader storage buffer
+
 	shader_data s_data = { 50, 2, 10};
 	for (int i = 0; i < 10; i++) {
 		for (int j = 0; j < 10; j++) {
@@ -266,7 +268,31 @@ int main() {
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, appState.ssbo);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
+	// Init the frame buffer
 
+	Framebuffer &fb = appState.framebuffer;
+	glGenFramebuffers(1, &fb.fbo);
+	
+	glGenTextures(1, &fb.colorTexture);
+	glBindTexture(GL_TEXTURE_2D, fb.colorTexture);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, fb.width, fb.height, 0, GL_RGBA, GL_FLOAT, nullptr);
+	
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, fb.colorTexture, 0);
+
+	GLenum drawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
+	glDrawBuffers(1, drawBuffers);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		std::cerr << "Failed to create framebuffer" << std::endl;
+	}
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	// Init the camera
+	
 	bool s_data_changed = false;
 
 	int spp = 1;
@@ -310,6 +336,9 @@ int main() {
 
 		updateCamera(deltaTime);
 
+		glBindFramebuffer(GL_FRAMEBUFFER, fb.fbo);
+		glViewport(0, 0, width, height);
+
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, appState.ssbo);
 
 		if (s_data_changed) {
@@ -321,15 +350,18 @@ int main() {
 
 			s_data_changed = false;
 		}
-		
+
+		camera.projection = glm::perspective(glm::radians(70.0f ), (float)width / (float)height, 0.1f, 100.0f);
+		camera.view = glm::lookAt(camera.position, camera.position + camera.front, camera.up);
+
+		// First Pass
+		// TODO: Create the quad shader, make second and first pass, edit the fragment shader to do framebuffer.
+
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		// Draw the main quad
 		glUseProgram(appState.shader);
-
-		camera.projection = glm::perspective(glm::radians(70.0f ), (float)width / (float)height, 0.1f, 100.0f);
-		camera.view = glm::lookAt(camera.position, camera.position + camera.front, camera.up);
 
 		setUniformV2(appState.shader, "u_Resolution", glm::vec2(width, height));
 		setUniformF(appState.shader, "u_Time", glfwGetTime());
@@ -357,6 +389,8 @@ int main() {
 	glDeleteBuffers(1, &appState.vbo);
 	glDeleteProgram(appState.shader);
 	glDeleteBuffers(1, &appState.ssbo);
+	glDeleteFramebuffers(1, &fb.fbo);
+	glDeleteTextures(1, &fb.colorTexture);
 
 	glfwTerminate();
 
