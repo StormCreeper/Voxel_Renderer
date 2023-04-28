@@ -180,7 +180,6 @@ int main() {
 		return -1;
 
 
-
 	// Create the quad to render the voxel scene
 	float vertices[] = {
 		-1.0f, -1.0f, 0.0f,
@@ -206,17 +205,23 @@ int main() {
 
 	// Load the shader from a file
 	appState.shader = glCreateProgram();
+	appState.quad_shader = glCreateProgram();
 	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
 	GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+	GLuint quad_fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
 
 
 	// Loading the shaders and checking for compilation errors
 
 	std::string vertexShaderSource = loadFile("vertex.glsl");
 	std::string fragmentShaderSource = loadFile("fragment.glsl");
+	std::string quadFragShaderSource = loadFile("quad_frag.glsl");
+
+	// TODO: 
 
 	const char* vertexShaderSourceC = vertexShaderSource.c_str();
 	const char* fragmentShaderSourceC = fragmentShaderSource.c_str();
+	const char* quadFragShaderSourceC = quadFragShaderSource.c_str();
 
 	glShaderSource(vertexShader, 1, &vertexShaderSourceC, NULL);
 	glCompileShader(vertexShader);
@@ -236,6 +241,14 @@ int main() {
 		std::cerr << "Failed to compile fragment shader: " << infoLog << std::endl;
 	}
 
+	glShaderSource(quad_fragmentShader, 1, &quadFragShaderSourceC, NULL);
+	glCompileShader(quad_fragmentShader);
+	glGetShaderiv(quad_fragmentShader, GL_COMPILE_STATUS, &success);
+	if (!success) {
+		glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
+		std::cerr << "Failed to compile quad fragment shader: " << infoLog << std::endl;
+	}
+
 	glAttachShader(appState.shader, vertexShader);
 	glAttachShader(appState.shader, fragmentShader);
 	glLinkProgram(appState.shader);
@@ -245,8 +258,18 @@ int main() {
 		std::cerr << "Failed to link shader program: " << infoLog << std::endl;
 	}
 
+	glAttachShader(appState.quad_shader, vertexShader);
+	glAttachShader(appState.quad_shader, quad_fragmentShader);
+	glLinkProgram(appState.quad_shader);
+	glGetProgramiv(appState.quad_shader, GL_LINK_STATUS, &success);
+	if (!success) {
+		glGetProgramInfoLog(appState.shader, 512, NULL, infoLog);
+		std::cerr << "Failed to link quad shader program: " << infoLog << std::endl;
+	}
+
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragmentShader);
+	glDeleteShader(quad_fragmentShader);
 
 	// Init shader storage buffer
 
@@ -268,26 +291,51 @@ int main() {
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, appState.ssbo);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
-	// Init the frame buffer
+	// Init the frame buffers
 
-	Framebuffer &fb = appState.framebuffer;
-	glGenFramebuffers(1, &fb.fbo);
+	Framebuffer &fb1 = appState.fb1;
+	fb1.width = width;
+	fb1.height = height;
+	glGenFramebuffers(1, &fb1.fbo);
 	
-	glGenTextures(1, &fb.colorTexture);
-	glBindTexture(GL_TEXTURE_2D, fb.colorTexture);
+	glGenTextures(1, &fb1.colorTexture);
+	glBindTexture(GL_TEXTURE_2D, fb1.colorTexture);
 
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, fb.width, fb.height, 0, GL_RGBA, GL_FLOAT, nullptr);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, fb1.width, fb1.height, 0, GL_RGBA, GL_FLOAT, nullptr);
 	
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, fb.colorTexture, 0);
+	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, fb1.colorTexture, 0);
 
 	GLenum drawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
 	glDrawBuffers(1, drawBuffers);
 
 	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-		std::cerr << "Failed to create framebuffer" << std::endl;
+		std::cerr << "Failed to create framebuffer 1" << std::endl;
+	}
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	Framebuffer& fb2 = appState.fb2;
+	fb2.width = width;
+	fb2.height = height;
+	glGenFramebuffers(1, &fb2.fbo);
+
+	glGenTextures(1, &fb2.colorTexture);
+	glBindTexture(GL_TEXTURE_2D, fb2.colorTexture);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, fb2.width, fb2.height, 0, GL_RGBA, GL_FLOAT, nullptr);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, fb2.colorTexture, 0);
+
+	//GLenum drawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
+	glDrawBuffers(1, drawBuffers);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		std::cerr << "Failed to create framebuffer 2" << std::endl;
 	}
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -310,6 +358,7 @@ int main() {
 	float lastTime = glfwGetTime();
 	float lastTimeFPS = glfwGetTime();
 	int frameCount = 0;
+	int frame = 0;
 
 	// Main rendering / event loop
 	while (!glfwWindowShouldClose(appState.window)) {
@@ -336,8 +385,9 @@ int main() {
 
 		updateCamera(deltaTime);
 
-		glBindFramebuffer(GL_FRAMEBUFFER, fb.fbo);
 		glViewport(0, 0, width, height);
+
+		glUseProgram(appState.shader);
 
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, appState.ssbo);
 
@@ -358,10 +408,9 @@ int main() {
 		// TODO: Create the quad shader, make second and first pass, edit the fragment shader to do framebuffer.
 
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT);
+		glBindVertexArray(appState.vao);
 
 		// Draw the main quad
-		glUseProgram(appState.shader);
 
 		setUniformV2(appState.shader, "u_Resolution", glm::vec2(width, height));
 		setUniformF(appState.shader, "u_Time", glfwGetTime());
@@ -374,14 +423,46 @@ int main() {
 		setUniformInt(appState.shader, "u_SPP", spp);
 		setUniformInt(appState.shader, "u_Bounces", bounces);
 
-		glBindVertexArray(appState.vao);
+		fb1 = (frame % 2 == 0) ? appState.fb1 : appState.fb2;
+		fb2 = (frame % 2 == 1) ? appState.fb1 : appState.fb2;
+
+		glBindFramebuffer(GL_FRAMEBUFFER, fb1.fbo);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, fb2.colorTexture);
+
+		setUniformInt(appState.shader, "u_LastColors", 0);
+
+		glClear(GL_COLOR_BUFFER_BIT);
+
 		glDrawArrays(GL_TRIANGLES, 0, 6);
+
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+		//  Second pass
+
+		glClear(GL_COLOR_BUFFER_BIT);
+		glViewport(0, 0, width, height);
+		
+		glBindVertexArray(appState.vao);
+		glUseProgram(appState.quad_shader);
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, fb1.colorTexture);
+
+		setUniformInt(appState.quad_shader, "u_Texture", 0);
+
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+
 		glBindVertexArray(0);
+
+		// Update screen
 
 		glfwSwapBuffers(appState.window);
 		glfwPollEvents();
 
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+		frame++;
 	}
 
 	// Cleanup
@@ -389,8 +470,10 @@ int main() {
 	glDeleteBuffers(1, &appState.vbo);
 	glDeleteProgram(appState.shader);
 	glDeleteBuffers(1, &appState.ssbo);
-	glDeleteFramebuffers(1, &fb.fbo);
-	glDeleteTextures(1, &fb.colorTexture);
+	glDeleteFramebuffers(1, &fb1.fbo);
+	glDeleteFramebuffers(1, &fb2.fbo);
+	glDeleteTextures(1, &fb1.colorTexture);
+	glDeleteTextures(1, &fb2.colorTexture);
 
 	glfwTerminate();
 

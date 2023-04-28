@@ -11,7 +11,8 @@ layout (std430, binding = 2) buffer shader_data {
 
 };
 
-out vec4 FragColor;
+layout(location = 0) out vec4 outColor;
+
 in vec2 fragPos;
 
 uniform vec2 u_Resolution;
@@ -25,6 +26,8 @@ uniform bool useFresnel;
 
 uniform int u_SPP;
 uniform int u_Bounces;
+
+uniform sampler2D u_LastColors;
 
 float tseed = 0;
 uint rngState = uint(uint(gl_FragCoord.x) * uint(1973) + uint(gl_FragCoord.y) * uint(9277) + uint(tseed * 100) * uint(26699)) | uint(1);
@@ -367,5 +370,6 @@ void main() {
 	}
 
 
-	FragColor = vec4(finalColor, 1);
+	outColor = vec4(finalColor, 1);
+
 }

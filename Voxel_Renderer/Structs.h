@@ -55,8 +55,12 @@ struct Framebuffer {
 struct AppState {
 	GLFWwindow* window;
 	GLuint vao, vbo;
+
 	GLuint shader;
+	GLuint quad_shader;
+
 	shader_data s_data;
 	GLuint ssbo;
-	Framebuffer framebuffer;
+	Framebuffer fb1;
+	Framebuffer fb2;
 };
