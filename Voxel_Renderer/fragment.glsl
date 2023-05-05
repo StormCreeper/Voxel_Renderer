@@ -11,6 +11,7 @@ layout (std430, binding = 2) buffer shader_data {
 };
 
 layout(location = 0) out vec4 outColor;
+layout(location = 1) out vec4 outBloom;
 
 in vec2 fragPos;
 
@@ -29,9 +30,10 @@ uniform int u_Bounces;
 uniform int u_FrameSinceLastReset;
 
 uniform sampler2D u_LastColors;
+uniform sampler2D u_LastBloom;
 
 float tseed = 0;
-uint rngState = uint(uint(gl_FragCoord.x) * uint(1973) + uint(gl_FragCoord.y) * uint(9277) + uint(tseed * 100) * uint(26699) + u_FrameSinceLastReset) | uint(1);
+uint rngState = uint(uint(gl_FragCoord.x) * uint(19873) + uint(gl_FragCoord.y) * uint(92787) + uint(tseed * 100) * uint(26699) + u_FrameSinceLastReset) | uint(1);
 
 uint wang_hash(inout uint seed) {
     seed = uint(seed ^ uint(61)) ^ uint(seed >> uint(16));
@@ -52,6 +54,8 @@ vec3 RandomUnitVector(inout uint state) {
 	float y = r * sin(phi);
 	return vec3(x, y, z);
 }
+
+// --------------- Structs ---------------
 
 struct Material {
 	vec3 diffuse;
@@ -81,13 +85,17 @@ struct intersection {
 	bool hit;
 };
 
+
+// --------------- Scene ---------------
+
+
 const int numSpheres = 4;
 
 Sphere spheres[numSpheres] = Sphere[] (
-	Sphere(vec3(-3, 0, 0), 1, Material(vec3(0.95, 0.5, 0.95), vec3(1.0, 0.80, 0.80), vec3(0), 1.0, 0.1)),
-	Sphere(vec3(-1, 0, 0), 1, Material(vec3(0.5, 0.95, 0.95), vec3(0.80, 1.0, 0.80), vec3(0), 0.9, 0.1)),
-	Sphere(vec3(1, 2, -2), 1, Material(vec3(0.95, 0.95, 0.95), vec3(1, 1, 1), vec3(5), 0, 0)),
-	Sphere(vec3( 3, 0, 0), 1, Material(vec3(0.95, 0.95, 0.95), vec3(0.50, 0.50, 0.95), vec3(0), 0.1, 0.9))
+	Sphere(vec3(-3, 0, 0), 1, Material(vec3(0.95, 0.5, 0.95), vec3(1.0, 0.80, 0.80), vec3(0), 1.0, 0.9)),
+	Sphere(vec3(-1, 0, 0), 1, Material(vec3(0.5, 0.95, 0.95), vec3(0.80, 1.0, 0.80), vec3(0), 0.9, 0.9)),
+	Sphere(vec3(5, 2, 5), 1, Material(vec3(0.95, 0.95, 0.95), vec3(1, 1, 1), vec3(10), 0, 0)),
+	Sphere(vec3( 3, 0, 0), 1, Material(vec3(0.95, 0.95, 0.95), vec3(0.50, 0.50, 0.95), vec3(0), 0.9, 0.9))
 );
 
 const int numPlanes = 1;
@@ -95,6 +103,8 @@ const int numPlanes = 1;
 Plane planes[numPlanes] = Plane[] (
 	Plane(vec3(0, -1, 0), vec3(0, 1, 0), Material(vec3(1.0, 1.0, 1.0), vec3(0), vec3(0), 0.2, 0.5))
 );
+
+// --------------- Intersections ---------------
 
 float sphereIntersect(Sphere sphere, vec3 pos, vec3 dir) {
 	vec3 oc = pos - sphere.pos;
@@ -116,7 +126,7 @@ float planeIntersect(vec3 pos, vec3 dir, vec3 planeNormal, vec3 planePos) {
 }
 
 uint testVoxel(int x, int y, int z) {
-	//return float(y) < sin(float(x + z))  * 2 + 2 ? 1u : 0u;
+	if(x < 0 || x >= mapw || y < 0 || y >= maph || z < 0 || z >= mapd) return 0;
 	return data[x + y * mapw + z * mapw * maph];
 }
 
@@ -265,7 +275,7 @@ void sceneIntersect(vec3 pos, vec3 dir, out intersection closest) {
 		closest.t = t;
 		closest.pos = pos + dir * t;
 		closest.normal = normal;
-		closest.material = Material(palette[blockType], vec3(1), vec3(0), 0.999, 0.1);
+		closest.material = Material(palette[blockType], vec3(1), blockType==1 ? vec3(2) : vec3(0), 0, 0);
 		closest.hit = true;
 	}
 }
@@ -290,13 +300,14 @@ struct environment {
 };
 
 environment env = environment(
-	vec3(0.5, 0.7, 0.9) * 1.2,
-	vec3(1.0, 0.8, 0.6) * 1.2,
-	vec3(0.7, 0.6, 0.4),
+	vec3(0.5, 0.7, 0.9) * 0.5, // SkyColorZenith
+	vec3(1.0, 0.8, 0.6) * 0.5, // SkyColorHorizon
+	vec3(0.7, 0.6, 0.4) * 0.5, // GroundColor
 	vec3(1, 1, 1),
 	normalize(vec3(0.5, 0.5, 0.5)),
 	500,
 	50
+
 );
 
 float FresnelReflectAmount(float n1, float n2, vec3 normal, vec3 incident, float f0, float f90) {
@@ -333,6 +344,10 @@ vec3 skycolor(vec3 dir) {
 	return lerp(env.GroundColor, skyGradient, groundToSkyT) + sun * env.SunColor * sunMask;
 }
 
+float compMax(vec3 color) {
+    return max(max(color.x, color.y), color.z);
+}
+
 void main() {
 	vec3 finalColor = vec3(0);
 
@@ -358,7 +373,7 @@ void main() {
 				vec3 specularDir = reflect(RayDirection, closest.normal);
 				bool ifSpecular = RandomFloat01(rngState) < (useFresnel ? FresnelReflectAmount(1, 1.5, RayDirection, closest.normal, closest.material.specularChance, 1) : closest.material.specularChance);
 
-				RayDirection = lerp(diffuseDir, specularDir, ifSpecular ? closest.material.smoothness : 0);
+				RayDirection = lerp(diffuseDir, specularDir, ifSpecular ? closest.material.smoothness : 0) + 0.001 * closest.normal;
 				incomingLight += rayColor * closest.material.emissive;
 				rayColor *= lerp(closest.material.diffuse, closest.material.specular, ifSpecular ? closest.material.smoothness : 0);
 			} else {
@@ -371,9 +386,33 @@ void main() {
 	}
 	
 	outColor = vec4(finalColor, 1);
-	if(u_FrameSinceLastReset > 0) {
-		vec4 lastColor = texture(u_LastColors, gl_FragCoord.xy / u_Resolution.xy);
-		outColor = (outColor + lastColor * u_FrameSinceLastReset) / (u_FrameSinceLastReset + 1);
+
+	int bloomSamples = u_SPP * 2;
+
+	vec3 bloom = vec3(0.0);
+
+	for(int i = 0; i < bloomSamples; i++) {
+		// select offset based on gaussian distribution
+		float u = RandomFloat01(rngState);
+		float v = RandomFloat01(rngState);
+		float r = sqrt(-2.0 * log(u)) * 0.1;
+		float theta = 2.0 * 3.1415926535897932384626433832795 * v;
+		vec2 offset = vec2(r * cos(theta), r * sin(theta));
+
+		vec3 sampleColor = texture(u_LastColors, fragPos * 0.5 + 0.5 + offset * 0.5).rgb;
+		if(compMax(sampleColor) > 1.5) bloom += sampleColor;
 	}
 
+	outBloom.xyz = bloom / float(bloomSamples);
+
+
+	if(u_FrameSinceLastReset > 0) {
+		vec4 lastColor =  texture(u_LastColors, (gl_FragCoord.xy + 0.5) / u_Resolution.xy);
+		outColor = (outColor + lastColor * u_FrameSinceLastReset) / (u_FrameSinceLastReset + 1);
+
+		// Add to the bloom buffer
+
+		vec3 lastBloom = texture(u_LastBloom, (gl_FragCoord.xy + 0.5) / u_Resolution.xy).rgb;
+		outBloom = vec4((outBloom.xyz + lastBloom * u_FrameSinceLastReset) / (u_FrameSinceLastReset + 1), 1);
+	}
 }

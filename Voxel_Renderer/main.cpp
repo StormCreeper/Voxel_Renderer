@@ -35,7 +35,12 @@ Camera camera;
 
 int frameSinceLastReset = 0;
 
+bool paused = false;
+
 void cameraMouseCallback(GLFWwindow *window, const double posX, const double posY) {
+
+	if(paused)
+		return;
 
 	frameSinceLastReset = 0;
 
@@ -67,13 +72,34 @@ void cameraMouseCallback(GLFWwindow *window, const double posX, const double pos
 }
 
 bool useFresnel = false;
+AppState* appStatePtr;
 
 void keyPressedCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
 
-	frameSinceLastReset = 0;
+	if (key == GLFW_KEY_P && action == GLFW_PRESS) {
+		appStatePtr->useSRGB = !appStatePtr->useSRGB;
+	}if (key == GLFW_KEY_O && action == GLFW_PRESS) {
+		appStatePtr->useACES = !appStatePtr->useACES;
+	}
 
-	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-		glfwSetWindowShouldClose(window, GLFW_TRUE);
+
+	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)  {
+		//hide or show cursor
+		if (paused) {
+			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+			paused = false;
+		}
+		else {
+			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+			paused = true;
+		}
+	}
+
+	if(paused)
+		return;
+
+
+	frameSinceLastReset = 0;
 
 	if (key == GLFW_KEY_F && action == GLFW_PRESS) {
 		useFresnel = !useFresnel;
@@ -163,7 +189,7 @@ bool initOpenGL(AppState *appState) {
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
 	// Create a windowed mode window and its OpenGL context
-	appState->window = glfwCreateWindow(800, 800, "Hello World", NULL, NULL);
+	appState->window = glfwCreateWindow(width, height, "Hello World", NULL, NULL);
 	if (!appState->window) {
 		std::cerr << "Failed to create GLFW window" << std::endl;
 		glfwTerminate();
@@ -182,10 +208,52 @@ bool initOpenGL(AppState *appState) {
 	return 1;
 }
 
+void initFrameBuffer(Framebuffer& buff) {
+	buff.width = width;
+	buff.height = height;
+	glGenFramebuffers(1, &buff.fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, buff.fbo);
+
+	glGenTextures(1, &buff.colorTexture);
+	glBindTexture(GL_TEXTURE_2D, buff.colorTexture);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, buff.width, buff.height, 0, GL_RGBA, GL_FLOAT, nullptr);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, buff.colorTexture, 0);
+
+	glGenTextures(1, &buff.bloomTexture);
+	glBindTexture(GL_TEXTURE_2D, buff.bloomTexture);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, buff.width, buff.height, 0, GL_RGBA, GL_FLOAT, nullptr);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, buff.bloomTexture, 0);
+
+	GLenum drawBuffers[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+	glDrawBuffers(2, drawBuffers);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		std::cerr << "Failed to create framebuffer 1" << std::endl;
+	}
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
 int main() {
 	srand(time(NULL));
 
 	AppState appState;
+	appStatePtr = &appState;
 	
 	if(!initOpenGL(&appState))
 		return -1;
@@ -284,11 +352,11 @@ int main() {
 
 	// Init shader storage buffer
 
-	shader_data s_data = { 50, 2, 10};
-	for (int i = 0; i < 10; i++) {
-		for (int j = 0; j < 10; j++) {
-			for (int k = 0; k < 10; k++) {
-				s_data.data[i + 10 * j + 100 * k] = (rand() % 2) * (rand() % 10);
+	shader_data s_data = { 15, 15, 15};
+	for (int i = 0; i < s_data.mapw; i++) {
+		for (int j = 0; j < s_data.maph; j++) {
+			for (int k = 0; k < s_data.mapd; k++) {
+				s_data.data[i + s_data.mapw * j + s_data.mapw * s_data.maph * k] = (rand() % 9 + 1) * ((i==0||i== s_data.mapw-1||j==0||j== s_data.maph-1||k==0||k== s_data.mapd-1) || (rand() % 10 == 0));
 			}
 		}
 	}
@@ -305,59 +373,17 @@ int main() {
 	// Init the frame buffers
 
 	Framebuffer *fb1 = &appState.fb1;
-	fb1->width = width;
-	fb1->height = height;
-	glGenFramebuffers(1, &fb1->fbo);
-	glBindFramebuffer(GL_FRAMEBUFFER, fb1->fbo);
-	
-	glGenTextures(1, &fb1->colorTexture);
-	glBindTexture(GL_TEXTURE_2D, fb1->colorTexture);
-
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, fb1->width, fb1->height, 0, GL_RGBA, GL_FLOAT, nullptr);
-	
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, fb1->colorTexture, 0);
-
-	GLenum drawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
-	glDrawBuffers(1, drawBuffers);
-
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-		std::cerr << "Failed to create framebuffer 1" << std::endl;
-	}
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	initFrameBuffer(appState.fb1);
 
 	Framebuffer *fb2 = &appState.fb2;
-	fb2->width = width;
-	fb2->height = height;
-	glGenFramebuffers(1, &fb2->fbo);
-	glBindFramebuffer(GL_FRAMEBUFFER, fb2->fbo);
-
-	glGenTextures(1, &fb2->colorTexture);
-	glBindTexture(GL_TEXTURE_2D, fb2->colorTexture);
-
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, fb2->width, fb2->height, 0, GL_RGBA, GL_FLOAT, nullptr);
-
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, fb2->colorTexture, 0);
-
-	//GLenum drawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
-	glDrawBuffers(1, drawBuffers);
-
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-		std::cerr << "Failed to create framebuffer 2" << std::endl;
-	}
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	initFrameBuffer(appState.fb2);
 
 	// Init the camera
 	
 	bool s_data_changed = false;
 
 	int spp = 1;
-	int bounces = 10;
+	int bounces = 30;
 
 	initCamera();
 
@@ -406,7 +432,7 @@ int main() {
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glBindVertexArray(appState.vao);
 
-		glViewport(0, 0, width, height);
+		glViewport(0, 0, fb1->width, fb1->height);
 
 		glUseProgram(appState.shader);
 
@@ -430,7 +456,7 @@ int main() {
 
 		// Draw the main quad
 
-		setUniformV2(appState.shader, "u_Resolution", glm::vec2(width, height));
+		setUniformV2(appState.shader, "u_Resolution", glm::vec2(fb1->width, fb1->height));
 		setUniformF(appState.shader, "u_Time", glfwGetTime());
 
 		setUniformM4(appState.shader, "u_InverseView", glm::inverse(camera.view));
@@ -445,8 +471,11 @@ int main() {
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, fb2->colorTexture);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, fb2->bloomTexture);
 
 		setUniformInt(appState.shader, "u_LastColors", 0);
+		setUniformInt(appState.shader, "u_LastBloom", 1);
 
 		glClear(GL_COLOR_BUFFER_BIT);
 
@@ -466,8 +495,15 @@ int main() {
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, fb1->colorTexture);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, fb1->bloomTexture);
 
 		setUniformInt(appState.quad_shader, "u_Texture", 0);
+		setUniformInt(appState.quad_shader, "u_BloomTexture", 1);
+		setUniformInt(appState.quad_shader, "useSRGB", appState.useSRGB);
+		setUniformInt(appState.quad_shader, "useACES", appState.useACES);
+
+		setUniformInt(appState.quad_shader, "u_FrameSinceLastReset", frameSinceLastReset);
 
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 

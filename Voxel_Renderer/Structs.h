@@ -41,13 +41,14 @@ struct shader_data {
 
 	glm::vec3 palette[10];
 	
-	int data[1000];
+	int data[15*15*15];
 
 };
 
 struct Framebuffer {
 	GLuint fbo;
 	GLuint colorTexture;
+	GLuint bloomTexture;
 	int width;
 	int height;
 };
@@ -63,4 +64,7 @@ struct AppState {
 	GLuint ssbo;
 	Framebuffer fb1;
 	Framebuffer fb2;
+
+	bool useSRGB = true;
+	bool useACES = true;
 };
